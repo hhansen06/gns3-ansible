@@ -1,0 +1,78 @@
+- hosts: localhost
+  gather_facts: no
+  vars:
+    gns3_url: "http://172.18.20.10"
+    gns3_project_name: "demo_lab"
+    gns3_nodes_spec:
+      - name: "IPN001"
+        template: "Cisco NX-OSv 9000"
+      - name: "IPN002"
+        template: "Cisco NX-OSv 9000"
+      - name: "IPN003"
+        template: "Cisco NX-OSv 9000"
+      - name: "Cloud"
+        template: "Cloud"
+      - name: "OOB"
+        template: "Ethernet switch"
+
+    gns3_links_spec:
+      - ["IPN001", "Ethernet1/1", "IPN002", "Ethernet1/1"]
+      - ["IPN002", "Ethernet1/2", "IPN003", "Ethernet1/2"]
+      - ["IPN003", "Ethernet1/3", "IPN001", "Ethernet1/3"]
+
+      - ["OOB", "Ethernet1", "IPN001", "mgmt0"]
+      - ["OOB", "Ethernet2", "IPN002", "mgmt0"]
+      - ["OOB", "Ethernet3", "IPN003", "mgmt0"]
+      - ["OOB", "Ethernet0", "Cloud", "eno1"]
+
+
+  collections:
+    - davidban77.gns3
+  tasks:
+    - name: "Create network topology"
+      gns3_project:
+        url: "{{ gns3_url }}"
+        project_name: "demo_lab"
+        state: present
+        nodes_spec: "{{ gns3_nodes_spec }}"
+        links_spec: "{{ gns3_links_spec }}"
+
+    - name: "Start nodes"
+      gns3_project:
+        url: "{{ gns3_url }}"
+        project_name: "{{ gns3_project_name }}"
+        state: opened
+        nodes_state: started
+        nodes_strategy: all
+  
+    - name: "Get GNS3 Project ID"
+      uri:
+        url: "{{ gns3_url }}:3080/v2/projects"
+        method: GET
+        body_format: json
+      register: projects
+    
+    - name: "Find Project ID"
+      set_fact:
+        gns3_project_id:  "{{ projects.json[0].project_id }}"
+
+    - name: "Get GNS3 Nodes"
+      uri:
+        url: "{{ gns3_url }}:3080/v2/projects/{{ gns3_project_id }}/nodes"
+        method: GET
+        body_format: json
+      register: node_data_raw
+
+    # - name: "Register Node Data"
+    #   debug:
+    #     msg: "Node ID: {{item.node_id}}" 
+    #   loop: "{{node_data_raw.json | community.general.json_query(filter) }}"
+
+    - name: debug
+      debug:
+        msg: "{{ node_data_raw.json | community.general.json_query(filter) }}"
+      vars: 
+      - filter: "[].{name: name, node_id:node_id, mac_addr:ports[?name=='mgmt0'].mac_address}"
+
+
+  
